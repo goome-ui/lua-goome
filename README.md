@@ -115,18 +115,15 @@ For mods inside other peoples games the other bindings are better, <a href="http
 <br>
 
 <p align="center">
-With <a href="https://luarocks.org/">LuaRocks</a>, straight from this repo:
+It isnt on the luarocks.org server, so <a href="https://luarocks.org/">LuaRocks</a> takes the rock from the <a href="https://github.com/goome-ui/lua-goome/releases">releases page</a>:
 </p>
 
 ```sh
-git clone https://github.com/goome-ui/lua-goome
-cd lua-goome
-luarocks make goome-0.5.0-1.rockspec
+luarocks install https://github.com/goome-ui/lua-goome/releases/download/v0.5.0/goome-0.5.0-1.src.rock
 ```
 
 <p align="center">
-It builds the module with your C compiler, that takes a few seconds and only happens once. Add <code>--lua-version 5.1</code> for a LuaJIT tree.<br>
-It isnt on the luarocks.org server yet, the rockspec is ready for when it is.
+It builds the module with your C compiler, that takes a few seconds and only happens once. Add <code>--lua-version 5.1</code> for a LuaJIT tree. From a clone its <code>luarocks make goome-0.5.0-1.rockspec</code>.
 </p>
 
 <p align="center">
