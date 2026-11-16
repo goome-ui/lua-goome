@@ -64,6 +64,12 @@ jobs:
           GOOME_BACKEND=test GOOME_TEST_SCRIPT='screen 1280x720 1; 3 click 70,110; end 12' lua-dist/54/lua$EXE examples/ui_demo.lua
           GOOME_BACKEND=test lua-dist/54/lua$EXE examples/grab.lua build/grab.ppm
           lua-dist/54/lua$EXE examples/offscreen.lua build/offscreen.ppm
+          GOOME_BACKEND=test GOOME_TEST_SCRIPT='screen 1x1 1; 3 click 40,60; 20 close; end 40' lua-dist/54/lua$EXE examples/anim.lua
+          GOOME_BACKEND=test GOOME_TEST_SCRIPT='screen 1x1 1; 3 text hi; 4 preedit abc 1; 6 close; end 10' lua-dist/54/lua$EXE examples/text.lua
+          lua-dist/54/lua$EXE examples/a11y.lua
+          export LUA_CPATH="build/jit/?.$LIB"
+          GOOME_BACKEND=test GOOME_TEST_SCRIPT='screen 1x1 1; 3 click 40,60; 20 close; end 40' lua-dist/jit/luajit$EXE examples/anim.lua
+          lua-dist/jit/luajit$EXE examples/a11y.lua
 
   luarocks:
     runs-on: ubuntu-latest

@@ -454,6 +454,62 @@ c:clip_push(20, 15, 80, 50) ... c:clip_pop()
 </details>
 
 <details>
+<summary align="center"><b>🎞️ Animations 🎞️</b></summary>
+
+<br>
+
+<p align="center">
+<code>ui:anim(id, target, ms, ease)</code> gives you a number that slides toward <code>target</code> over <code>ms</code>. Call it every frame with the same id, change the target whenever you want and it moves from wherever it is right now. <code>ui:anim_color</code> does the same for a color.
+</p>
+
+```lua
+local x = ui:anim("panel", open and 300 or 0, 250, goome.EASE_OUT)
+local col = ui:anim_color("panel color", hover and 0xFF4FB3F7 or 0xFF2A2F38, 150, goome.EASE_LINEAR)
+c:rrect(x, 40, 200, 120, 12, col)
+local t = goome.ease(goome.EASE_BOUNCE, 0.25)   -- just the curve, 0..1 in
+```
+
+<p align="center">
+The eases are <code>EASE_LINEAR</code>, <code>EASE_IN</code>, <code>EASE_OUT</code>, <code>EASE_IN_OUT</code>, <code>EASE_SMOOTH</code>, <code>EASE_BACK</code>, <code>EASE_SPRING</code> and <code>EASE_BOUNCE</code> (spring and back go past the end a bit). <code>EASE_CUSTOM</code> uses your <code>ui:config().ease</code> function.<br>
+While something is still moving <code>ui:animating()</code> is true, so <code>goome.app</code> keeps drawing until it stops by itself.
+</p>
+</details>
+
+<details>
+<summary align="center"><b>🌍 Emoji, RTL, IME And Screen Readers 🌍</b></summary>
+
+<br>
+
+<p align="center">
+Fonts do color emoji (COLR, CBDT and sbix), skin tones, ZWJ sequences, Hebrew and Arabic now. <code>goome.font_system()</code> already adds the system emoji font, for your own fonts chain one on:
+</p>
+
+```lua
+local font = assert(goome.font_load("MyFont.ttf"))
+font:fallback(assert(goome.font_load("NotoColorEmoji.ttf")))   -- tried for anything MyFont doesnt have
+goome.text_dir("rtl")                                          -- "auto" (default), "ltr" or "rtl", or goome.DIR_*
+```
+
+<p align="center">
+The font keeps its fallbacks alive, closing the fallback yourself is fine. Up to 8 per font like in C.<br> <br>
+IME (Japanese, Chinese, Korean, dead keys...) works in <code>ui:input</code> and <code>ui:text_edit</code> by itself. If you do your own text box, <code>g:text_input(true, {x, y, w, h})</code> turns it on and puts the candidate window by your caret, then you get <code>TEXT</code> events (finished text) and <code>PREEDIT</code> events (what's being typed). <code>ev.ime</code> has all of it (<code>ev.msg</code> gets cut at 63 bytes) and <code>ev.caret</code> is where the caret is in the preedit, in bytes. <code>g:push_ime(text)</code> and <code>g:push_preedit(text, caret)</code> fake them for tests or engines.<br> <br>
+The ui kit builds an accessibility tree every frame, screen readers get it in window mode. Offscreen and in overlays its off until <code>ui:a11y(true)</code>, then <code>ui:a11y_tree()</code> gives you the nodes so your engine can hand them to its own screen reader stuff:
+</p>
+
+```lua
+for i, n in ipairs(ui:a11y_tree()) do
+  print(i, n.role == goome.ROLE_BUTTON, n.label, n.value, n.parent, n.checked, n.focused)
+end
+ui:a11y_role(goome.ROLE_SLIDER, "Hue")   -- for the next ui:custom
+ui:a11y_value("120")
+```
+
+<p align="center">
+Each node has <code>role</code>, <code>label</code>, <code>value</code>, <code>x y w h</code>, <code>id</code>, <code>num min max</code>, <code>caret</code>, <code>states</code> plus <code>focused checked disabled expanded selected</code> as booleans. <code>parent</code> is the index of the parent in the same list and <code>nil</code> on the root.
+</p>
+</details>
+
+<details>
 <summary align="center"><b>🧩 Examples 🧩</b></summary>
 
 <br>
@@ -463,6 +519,9 @@ c:clip_push(20, 15, 80, 50) ... c:clip_pop()
 - `examples/ui_demo.lua` - the ui kit demo with every widget, a theme editor and a stats window
 - `examples/app.lua` - a notes app in a normal window with menus, a split pane, a multiline editor, right click menus and a dialog
 - `examples/offscreen.lua` - draws the ui with no window and saves it as a picture
+- `examples/anim.lua` - every ease racing each other, press the button to send them back
+- `examples/text.lua` - emoji, Hebrew and Arabic with a direction picker and a text box for your IME. `lua examples/text.lua font.ttf emoji.ttf` uses your own fonts
+- `examples/a11y.lua` - prints what a screen reader would see of a small settings window
 - `examples/love/main.lua` - a LÖVE game with a goome mod menu on top
 
 They're ports of the C examples. Way more small projects live in [goome-ui/examples](https://github.com/goome-ui/examples).
