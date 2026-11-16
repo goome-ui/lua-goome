@@ -1,0 +1,8 @@
+*.so
+*.dll
+*.dylib
+*.o
+/*.ppm
+test-out/
+lua-dist/
+build/
