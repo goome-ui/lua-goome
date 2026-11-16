@@ -121,7 +121,7 @@ With <a href="https://luarocks.org/">LuaRocks</a>, straight from this repo:
 ```sh
 git clone https://github.com/goome-ui/lua-goome
 cd lua-goome
-luarocks make goome-dev-1.rockspec
+luarocks make goome-0.5.0-1.rockspec
 ```
 
 <p align="center">
