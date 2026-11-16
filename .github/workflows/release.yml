@@ -1,0 +1,38 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  upload:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: lua and luarocks
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q lua5.4 liblua5.4-dev luarocks
+      - name: src rock
+        run: |
+          v=${TAG#v}
+          test -f "goome-$v-1.rockspec" || { echo "no goome-$v-1.rockspec"; ls; exit 1; }
+          mkdir out
+          cd out
+          luarocks --lua-version 5.4 pack "../goome-$v-1.rockspec"
+          test -s "goome-$v-1.src.rock"
+      - name: upload
+        run: |
+          v=${TAG#v}
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --verify-tag --title "goome $v" --notes "goome $v"
+          gh release upload "$TAG" "out/goome-$v-1.src.rock" "goome-$v-1.rockspec" --clobber
