@@ -19,6 +19,17 @@
 #define LG_LEN(L, i) ((int)lua_rawlen(L, i))
 #endif
 
+#if LUA_VERSION_NUM < 502
+#define LG_GETUV(L, i) lua_getfenv(L, i)
+#define LG_SETUV(L, i) lua_setfenv(L, i)
+#elif LUA_VERSION_NUM < 504
+#define LG_GETUV(L, i) lua_getuservalue(L, i)
+#define LG_SETUV(L, i) lua_setuservalue(L, i)
+#else
+#define LG_GETUV(L, i) lua_getiuservalue(L, i, 1)
+#define LG_SETUV(L, i) lua_setiuservalue(L, i, 1)
+#endif
+
 #define MT_G "goome.Goome"
 #define MT_CANVAS "goome.Canvas"
 #define MT_IMAGE "goome.Image"
@@ -77,10 +88,12 @@ typedef struct {
     int closed, users, keep;
 } lg_bmp;
 
-typedef struct {
+typedef struct lg_font lg_font;
+struct lg_font {
     goome_font *f;
-    int closed, users;
-} lg_font;
+    int closed, users, nfb;
+    lg_font *fb[8];
+};
 
 typedef struct {
     int ref;
@@ -626,6 +639,15 @@ static void lg_ev_push(lua_State *L, const goome_event *ev, goome *g)
         lua_pushstring(L, p ? p : m);
         lua_setfield(L, -2, "path");
     }
+    if ((ev->type == GOOME_TEXT || ev->type == GOOME_PREEDIT) && g) {
+        const char *p = goome_event_text(g);
+        lua_pushstring(L, p && (*p || ev->type == GOOME_PREEDIT) ? p : m);
+        lua_setfield(L, -2, "ime");
+        if (ev->type == GOOME_PREEDIT) {
+            lua_pushinteger(L, goome_preedit_cursor(g));
+            lua_setfield(L, -2, "caret");
+        }
+    }
 }
 
 static int g_poll(lua_State *L)
@@ -836,6 +858,48 @@ static int g_drop_path(lua_State *L)
     if (p) lua_pushstring(L, p);
     else lua_pushnil(L);
     return 1;
+}
+
+static int g_event_text(lua_State *L)
+{
+    lua_pushstring(L, goome_event_text(lg_gopen(L, 1)->g));
+    return 1;
+}
+
+static int g_preedit_cursor(lua_State *L)
+{
+    lua_pushinteger(L, goome_preedit_cursor(lg_gopen(L, 1)->g));
+    return 1;
+}
+
+static int g_text_input(lua_State *L)
+{
+    lg_g *g = lg_gopen(L, 1);
+    goome_rect r;
+    int on = lua_isnone(L, 2) ? 1 : lg_bool(L, 2);
+    return lg_res(L, g->g, goome_text_input(g->g, on, lg_rect_at(L, 3, &r) ? &r : NULL));
+}
+
+static int lg_push_ime(lua_State *L, int type)
+{
+    lg_g *g = lg_gopen(L, 1);
+    goome_event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = type;
+    ev.id = type == GOOME_PREEDIT ? (int)luaL_optnumber(L, 3, 0) : 0;
+    const char *s = luaL_optstring(L, 2, "");
+    strncpy(ev.msg, s, sizeof(ev.msg) - 1);
+    return lg_res(L, g->g, goome_push(g->g, &ev));
+}
+
+static int g_push_ime(lua_State *L)
+{
+    return lg_push_ime(L, GOOME_TEXT);
+}
+
+static int g_push_preedit(lua_State *L)
+{
+    return lg_push_ime(L, GOOME_PREEDIT);
 }
 
 static int g_push(lua_State *L)
@@ -1720,6 +1784,8 @@ static int lg_push_font(lua_State *L, goome_font *gf, const char *what)
     memset(f, 0, sizeof(*f));
     f->f = gf;
     lg_newmt(L, MT_FONT);
+    lua_newtable(L);
+    LG_SETUV(L, -2);
     return 1;
 }
 
@@ -1751,6 +1817,10 @@ static void lg_font_free(lg_font *f)
 {
     if (f->f) goome_font_free(f->f);
     f->f = NULL;
+    int n = f->nfb;
+    f->nfb = 0;
+    for (int i = 0; i < n; i++)
+        if (--f->fb[i]->users == 0 && f->fb[i]->closed) lg_font_free(f->fb[i]);
 }
 
 static int font_close(lua_State *L)
@@ -1793,6 +1863,26 @@ static int font_line_height(lua_State *L)
     return 1;
 }
 
+static int font_fallback(lua_State *L)
+{
+    lg_font *f = lg_ft(L, 1), *fb = lg_ft(L, 2);
+    lua_settop(L, 2);
+    if (fb == f || f->nfb >= 8) return 1;
+    for (int i = 0; i < f->nfb; i++)
+        if (f->fb[i] == fb) {
+            lua_settop(L, 1);
+            return 1;
+        }
+    goome_font_fallback(f->f, fb->f);
+    f->fb[f->nfb++] = fb;
+    fb->users++;
+    LG_GETUV(L, 1);
+    lua_pushvalue(L, 2);
+    lua_rawseti(L, -2, f->nfb);
+    lua_settop(L, 1);
+    return 1;
+}
+
 static int font_index(lua_State *L)
 {
     if (lg_methods_first(L)) return 1;
@@ -1823,6 +1913,19 @@ static int l_set_font(lua_State *L)
 {
     goome_set_font((int)N(1));
     return 0;
+}
+
+static int l_text_dir(lua_State *L)
+{
+    static const char *const dirs[] = {"auto", "ltr", "rtl", NULL};
+    goome_text_dir(lg_named(L, 1, dirs, GOOME_DIR_AUTO));
+    return 0;
+}
+
+static int l_ease(lua_State *L)
+{
+    lua_pushnumber(L, goome_ease((int)N(1), N(2)));
+    return 1;
 }
 
 static int l_font_count(lua_State *L)
@@ -2684,6 +2787,99 @@ static int ui_custom(lua_State *L)
     return 2;
 }
 
+static int ui_anim(lua_State *L)
+{
+    lg_ui *u = lg_uiopen(L, 1);
+    lua_pushnumber(L, goome_ui_anim(u->u, lg_tostr(L, 2), N(3), luaL_optnumber(L, 4, 200), (int)luaL_optnumber(L, 5, GOOME_EASE_OUT)));
+    return 1;
+}
+
+static int ui_anim_color(lua_State *L)
+{
+    lg_ui *u = lg_uiopen(L, 1);
+    uint32_t c = goome_ui_anim_color(u->u, lg_tostr(L, 2), lg_u32(L, 3), luaL_optnumber(L, 4, 200), (int)luaL_optnumber(L, 5, GOOME_EASE_OUT));
+    lua_pushnumber(L, (lua_Number)c);
+    return 1;
+}
+
+static int ui_a11y(lua_State *L)
+{
+    goome_ui_a11y(lg_uiopen(L, 1)->u, lua_isnone(L, 2) ? 1 : lg_bool(L, 2));
+    return 0;
+}
+
+static int ui_a11y_role(lua_State *L)
+{
+    goome_ui_a11y_role(lg_uiopen(L, 1)->u, (int)N(2), luaL_optstring(L, 3, NULL));
+    return 0;
+}
+
+static int ui_a11y_value(lua_State *L)
+{
+    goome_ui_a11y_value(lg_uiopen(L, 1)->u, luaL_optstring(L, 2, NULL));
+    return 0;
+}
+
+static void lg_cstr_field(lua_State *L, const char *s, size_t cap, const char *k)
+{
+    const char *e = (const char *)memchr(s, 0, cap);
+    lua_pushlstring(L, s, e ? (size_t)(e - s) : cap);
+    lua_setfield(L, -2, k);
+}
+
+static int ui_a11y_tree(lua_State *L)
+{
+    lg_ui *u = lg_uiopen(L, 1);
+    int n = goome_a11y_tree(u->u, NULL, 0);
+    goome_a11y_node *ns = n > 0 ? (goome_a11y_node *)malloc(sizeof(goome_a11y_node) * (size_t)n) : NULL;
+    if (n > 0 && !ns) return luaL_error(L, "out of memory");
+    if (ns) {
+        int m = goome_a11y_tree(u->u, ns, n);
+        if (m < n) n = m;
+    }
+    lua_createtable(L, n > 0 ? n : 0, 0);
+    static const char *const states[] = {"focused", "checked", "disabled", "expanded", "selected"};
+    for (int i = 0; i < n; i++) {
+        const goome_a11y_node *a = &ns[i];
+        lua_createtable(L, 0, 20);
+        lua_pushinteger(L, a->role);
+        lua_setfield(L, -2, "role");
+        if (a->parent >= 0 && a->parent < n) {
+            lua_pushinteger(L, a->parent + 1);
+            lua_setfield(L, -2, "parent");
+        }
+        lua_pushinteger(L, a->states);
+        lua_setfield(L, -2, "states");
+        for (int k = 0; k < 5; k++) {
+            lua_pushboolean(L, (a->states >> k) & 1);
+            lua_setfield(L, -2, states[k]);
+        }
+        lua_pushnumber(L, a->x);
+        lua_setfield(L, -2, "x");
+        lua_pushnumber(L, a->y);
+        lua_setfield(L, -2, "y");
+        lua_pushnumber(L, a->w);
+        lua_setfield(L, -2, "w");
+        lua_pushnumber(L, a->h);
+        lua_setfield(L, -2, "h");
+        lg_cstr_field(L, a->label, sizeof(a->label), "label");
+        lg_cstr_field(L, a->value, sizeof(a->value), "value");
+        lua_pushnumber(L, (lua_Number)a->id);
+        lua_setfield(L, -2, "id");
+        lua_pushnumber(L, a->num);
+        lua_setfield(L, -2, "num");
+        lua_pushnumber(L, a->min);
+        lua_setfield(L, -2, "min");
+        lua_pushnumber(L, a->max);
+        lua_setfield(L, -2, "max");
+        lua_pushinteger(L, a->caret);
+        lua_setfield(L, -2, "caret");
+        lua_rawseti(L, -2, i + 1);
+    }
+    free(ns);
+    return 1;
+}
+
 static int ui_canvas(lua_State *L)
 {
     lg_ui *u = lg_uiopen(L, 1);
@@ -3291,7 +3487,8 @@ static const luaL_Reg g_methods[] = {
     {"keyboard", g_keyboard}, {"grab", g_grab}, {"grabbed", g_grabbed}, {"hotkey", g_hotkey}, {"control_path", g_control_path},
     {"mode", g_mode}, {"window_title", g_window_title}, {"window_size", g_window_size}, {"window_pos", g_window_pos},
     {"window_state", g_window_state}, {"window_drag", g_window_drag}, {"window_show", g_window_show}, {"cursor", g_cursor},
-    {"clipboard", g_clipboard}, {"drop_path", g_drop_path}, {"push", g_push}, {"push_text", g_push_text}, {"push_click", g_push_click},
+    {"clipboard", g_clipboard}, {"drop_path", g_drop_path}, {"event_text", g_event_text},
+    {"preedit_cursor", g_preedit_cursor}, {"text_input", g_text_input}, {"push_ime", g_push_ime}, {"push_preedit", g_push_preedit}, {"push", g_push}, {"push_text", g_push_text}, {"push_click", g_push_click},
     {"resize", g_resize}, {"last_frame", g_frame}, {"hit", g_hit}, {"frame_dirty", g_frame_dirty}, {"frame_copy", g_frame_copy},
     {"ui", g_ui}, {NULL, NULL},
 };
@@ -3323,7 +3520,8 @@ static const luaL_Reg bmp_methods[] = {
 };
 
 static const luaL_Reg font_methods[] = {
-    {"close", font_close}, {"measure", font_measure}, {"width", font_width}, {"line_height", font_line_height}, {NULL, NULL},
+    {"close", font_close}, {"measure", font_measure}, {"width", font_width}, {"line_height", font_line_height},
+    {"fallback", font_fallback}, {NULL, NULL},
 };
 
 static const luaL_Reg ui_methods[] = {
@@ -3350,7 +3548,8 @@ static const luaL_Reg ui_methods[] = {
     {"push_num", ui_push_num}, {"push_radii", ui_push_radii}, {"push_font", ui_push_font}, {"push_skin", ui_push_skin},
     {"push_theme", ui_push_theme}, {"push_icon", ui_push_icon}, {"pop", ui_pop}, {"custom", ui_custom}, {"canvas", ui_canvas},
     {"store", ui_store}, {"theme", ui_theme}, {"theme_make", ui_theme_make}, {"theme_preset", ui_theme_preset},
-    {"scale", ui_scale}, {"config", ui_cfg}, {"bind", ui_bind}, {NULL, NULL},
+    {"scale", ui_scale}, {"config", ui_cfg}, {"bind", ui_bind}, {"anim", ui_anim}, {"anim_color", ui_anim_color},
+    {"a11y", ui_a11y}, {"a11y_role", ui_a11y_role}, {"a11y_value", ui_a11y_value}, {"a11y_tree", ui_a11y_tree}, {NULL, NULL},
 };
 
 static const luaL_Reg th_methods[] = {
@@ -3377,7 +3576,7 @@ static const luaL_Reg lib_funcs[] = {
     {"bitmap_wrap", l_bitmap_wrap}, {"bitmap_error", l_bitmap_error}, {"font_load", l_font_load},
     {"font_from_bytes", l_font_from_bytes}, {"font_system", l_font_system}, {"measure", l_measure},
     {"line_height", l_line_height}, {"set_font", l_set_font}, {"font_count", l_font_count}, {"strerror", l_strerror},
-    {"save_ppm", l_save_ppm}, {"theme", l_theme_new}, {"pixels", lg_pixels}, {"hash", lg_hash}, {"_layout", l_layout},
+    {"save_ppm", l_save_ppm}, {"theme", l_theme_new}, {"ease", l_ease}, {"text_dir", l_text_dir}, {"pixels", lg_pixels}, {"hash", lg_hash}, {"_layout", l_layout},
     {NULL, NULL},
 };
 

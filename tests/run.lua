@@ -80,7 +80,7 @@ local function compiler()
   end
 end
 
-local function run_c(src, name)
+local function run_c(src, name, args)
   local cc = compiler()
   if not cc then
     if strict() then error("no C compiler to check against") end
@@ -91,7 +91,7 @@ local function run_c(src, name)
   local r = os.execute(cmd)
   yes(r == true or r == 0, "compiling " .. src)
   local run = windows and exe:gsub("/", "\\") or exe
-  local p = assert(io.popen('"' .. run .. '"', "r"))
+  local p = assert(io.popen('"' .. run .. '"' .. (args or ""), "r"))
   local s = p:read("*a")
   p:close()
   os.remove(exe)
@@ -1003,6 +1003,374 @@ test("gc", function()
   end
   collectgarbage()
   collectgarbage()
+end)
+
+local scenes_out
+local function scenes()
+  if not scenes_out then
+    scenes_out = run_c(root .. "tests/scenes.c", "scenes", " " .. root .. "tests/data"):gsub("\r", "")
+  end
+  return scenes_out
+end
+
+local function c_line(tag)
+  for l in scenes():gmatch("[^\n]+") do
+    if l:sub(1, #tag + 1) == tag .. " " then return l end
+  end
+  error("the C scenes didnt print " .. tag)
+end
+
+local function c_block(tag)
+  local lines, on = {}, false
+  for l in scenes():gmatch("[^\n]+") do
+    if on and not l:match("^%-?%d+ %-?%d+ %d+ ") then break end
+    if on then lines[#lines + 1] = l end
+    if l:match("^" .. tag .. " %d+$") then on = true end
+  end
+  return lines
+end
+
+local function hexes(list)
+  local t = {}
+  for i, v in ipairs(list) do t[i] = hex(v) end
+  return table.concat(t, " ")
+end
+
+test("ease", function()
+  eq(goome.EASE_SMOOTH, 0, "EASE_SMOOTH")
+  eq(goome.EASE_CUSTOM, 5, "EASE_CUSTOM")
+  eq(goome.EASE_IN, 6, "EASE_IN")
+  eq(goome.EASE_SPRING, 7, "EASE_SPRING")
+  eq(goome.EASE_BOUNCE, 8, "EASE_BOUNCE")
+  eq(goome.ease(goome.EASE_LINEAR, 0.25), 0.25, "linear")
+  eq(goome.ease(goome.EASE_IN, 0.5), 0.125, "in")
+  eq(goome.ease(goome.EASE_OUT, 0.5), 0.875, "out")
+  eq(goome.ease(goome.EASE_IN_OUT, 0.25), 0.0625, "in out")
+  eq(goome.ease(goome.EASE_BOUNCE, 0.25), 0.47265625, "bounce")
+  eq(goome.ease(goome.EASE_OUT, -3), 0, "clamp low")
+  eq(goome.ease(goome.EASE_IN, 7), 1, "clamp high")
+  local peak = 0
+  for i = 1, 99 do peak = math.max(peak, goome.ease(goome.EASE_SPRING, i / 100)) end
+  yes(peak > 1.1 and peak < 1.25, "spring overshoot " .. peak)
+end)
+
+test("anim frames match C", function()
+  local g = assert(goome.open{backend = "test", mode = "window", width = 300, height = 200, test_script = "end 100000"})
+  local u = g:ui()
+  local k = {on = false}
+  local function frame()
+    for ev in g:events(0) do u:feed(ev) end
+    if not u:begin(0) then return end
+    local r = u:canvas()
+    k.box = u:anim("box", k.on and 200 or 10, 160, goome.EASE_OUT)
+    k.sp = u:anim("spring", k.on and 1 or 0, 320, goome.EASE_SPRING)
+    k.col = u:anim_color("col", k.on and 0xFF20D060 or 0, 200, goome.EASE_LINEAR)
+    k.last = u:anim("gone", k.on and 5 or 0, 100, goome.EASE_LINEAR)
+    if r then
+      r:rect(k.box, 20, 60, 40, 0xFFE0A030)
+      r:rrect(20 + k.sp * 180, 90, 50, 30, 15, 0xFF4FB3F7)
+      r:rect(20, 140, 260, 40, k.col)
+    end
+    u:finish()
+    k.hash = g:last_frame():hash()
+  end
+  frame()
+  yes(k.box == 10 and k.sp == 0 and k.col == 0 and k.last == 0, "start values")
+  frame()
+  eq(u:animating(), false, "animating at rest")
+  k.on = true
+  local hs, prev, over, mid = {}, k.box, 0, nil
+  for f = 0, 59 do
+    frame()
+    if f == 1 or f == 4 or f == 8 then hs[#hs + 1] = k.hash end
+    yes(k.box >= prev, "box only grows")
+    prev = k.box
+    over = math.max(over, k.sp)
+    if f == 6 then mid = k.col end
+  end
+  hs[#hs + 1] = k.hash
+  yes(k.box == 200 and k.sp == 1 and k.col == 0xFF20D060 and k.last == 5, "end values")
+  yes(over > 1.05, "spring overshoot")
+  local a = math.floor(mid / 16777216)
+  yes(a > 0x70 and a < 0x90, "half way color")
+  eq(hexes(hs), "0226f2f5 906d3ce5 db5848ad 12bea72d", "anim hashes")
+  eq("anim " .. hexes(hs), c_line("anim"), "anim hashes vs C")
+  u:close()
+  g:close()
+end)
+
+local function txt_hash(c, f, size, s, argb, dir, w, h)
+  c:pixels():fill(0)
+  c.w, c.h, c.kx0, c.ky0, c.kx1, c.ky1 = w, h, 0, 0, w, h
+  goome.text_dir(dir)
+  c:font_text(f, size, 4, 4, s, argb)
+  goome.text_dir(goome.DIR_AUTO)
+  c.w, c.h = 400, 120
+  return c:hash()
+end
+
+test("emoji and rtl text match C", function()
+  local f = assert(goome.font_from_bytes(data("colr.ttf")))
+  local cb = assert(goome.font_from_bytes(data("cbdt.ttf")))
+  local sb = assert(goome.font_from_bytes(data("sbix.ttf")))
+  local d = assert(goome.font_from_bytes(data("dejavu-sub.ttf")))
+  local function near(a, b) return math.abs(a - b) < 0.01 end
+  yes(near(f:width("\240\159\152\128\240\159\143\187", 30), 24), "skin tone")
+  yes(near(f:width("\240\159\152\128\226\128\141\240\159\152\128", 30), 24), "zwj")
+  yes(near(f:width("\226\157\164", 30), 18) and near(f:width("\226\157\164\239\184\143", 30), 24), "variation selector")
+  local c = goome.canvas(400, 120)
+  local heb = "ab \215\144\215\145\215\146 (12) c"
+  local arab = "\216\168\217\132\216\167\217\133 \216\168\216\168\216\168 \217\132\217\133 \216\168\217\142\216\168"
+  local got = {}
+  got[1] = txt_hash(c, f, 30, "ab \240\159\152\128 \240\159\152\128\240\159\143\187 \240\159\152\128\226\128\141\240\159\152\128 \226\157\164 \226\157\164\239\184\143", 0xFF2040A0, "auto", 400, 60)
+  c:pixels():fill(0)
+  c.kx0, c.ky0, c.kx1, c.ky1 = 0, 0, 0, 0
+  c:font_text(cb, 16, 4, 4, "\240\159\144\177", 0xFFFFFFFF)
+  c:font_text(cb, 64, 30, 4, "\240\159\144\177", 0xFFFFFFFF)
+  c:font_text(sb, 40, 120, 4, "\240\159\144\177\240\159\144\177", 0x80FFFFFF)
+  local mid = c:pixel(65, 44)
+  yes(math.floor(mid / 16777216) == 255, "cat is solid")
+  got[2] = c:hash()
+  eq(d:fallback(f), d, "fallback returns the font")
+  d:fallback(d)
+  d:fallback(f)
+  yes(near(d:width("goome! \240\159\152\128", 20), d:width("goome! ", 20) + 16), "fallback width")
+  got[3] = txt_hash(c, d, 20, "goome! \240\159\152\128 Hi", 0xFFFFFFFF, goome.DIR_AUTO, 400, 40)
+  got[4] = txt_hash(c, f, 24, heb, 0xFFFFFFFF, "auto", 400, 40)
+  eq(hex(txt_hash(c, f, 24, heb, 0xFFFFFFFF, "ltr", 400, 40)), hex(got[4]), "ltr = auto here")
+  got[5] = txt_hash(c, f, 24, heb, 0xFFFFFFFF, goome.DIR_RTL, 400, 40)
+  got[6] = txt_hash(c, f, 30, arab, 0xFFFFFFFF, "auto", 400, 50)
+  raises(function() goome.text_dir("sideways") end, "bad dir")
+  eq(hexes(got), "3bab3875 85fe883a d3add387 b79518dd 49a72d7d 469719e1", "emoji rtl hashes")
+  eq("emoji " .. hexes(got), c_line("emoji"), "emoji rtl hashes vs C")
+  eq(string.format("measure %.3f %.3f", d:width("goome! \240\159\152\128", 20), f:width("\216\168\217\132\216\167\217\133 \216\168\216\168\216\168 \217\132\217\133", 20)), c_line("measure"), "measure vs C")
+  f:close()
+  yes(d:width("goome! \240\159\152\128", 20) > d:width("goome! ", 20) + 15, "fallback still alive after close")
+  d:close()
+  cb:close()
+  sb:close()
+end)
+
+test("font fallback lifetime", function()
+  for _ = 1, 30 do
+    local a = goome.font_from_bytes(data("dejavu-sub.ttf"))
+    local b = goome.font_from_bytes(data("colr.ttf"))
+    a:fallback(b)
+    b:fallback(a)
+    b:close()
+  end
+  collectgarbage()
+  collectgarbage()
+  local a = goome.font_from_bytes(data("dejavu-sub.ttf"))
+  a:fallback(goome.font_from_bytes(data("colr.ttf")))
+  collectgarbage()
+  collectgarbage()
+  local c = goome.canvas(100, 40)
+  c:font_text(a, 20, 0, 0, "\240\159\152\128")
+  yes(c:hash() ~= goome.canvas(100, 40):hash(), "fallback kept alive by its font")
+  a:close()
+  raises(function() a:fallback(a) end, "closed font")
+end)
+
+test("ime events", function()
+  local long = string.rep("q", 80)
+  local g = assert(goome.open{backend = "test", mode = "window", width = 100, height = 100,
+    test_script = "1 text " .. long .. ";2 preedit \227\129\171\227\129\187\227\130\147 3;3 preedit abc;4 preedit;end 10"})
+  eq(goome.TEXT, goome.DROP + 1, "TEXT")
+  eq(goome.PREEDIT, goome.DROP + 2, "PREEDIT")
+  assert(g:push_ime("hi"))
+  local ev = g:poll(0)
+  yes(ev and ev.type == goome.TEXT and ev.msg == "hi" and ev.ime == "hi", "pushed text")
+  eq(g:event_text(), "hi", "event_text")
+  assert(g:text_input(true, {10, 20, 1, 16}))
+  assert(g:text_input(false))
+  local got, quit = 0, false
+  for _ = 1, 20 do
+    for e in g:events(0) do
+      if e.type == goome.QUIT then quit = true end
+      if e.type == goome.TEXT then
+        got = got + 1
+        eq(#e.msg, 63, "cut msg")
+        eq(e.ime, long, "full text")
+        eq(g:event_text(), long, "event_text full")
+      end
+      if e.type == goome.PREEDIT and e.ime == "\227\129\171\227\129\187\227\130\147" then
+        got = got + 2
+        eq(e.caret, 3, "caret")
+        eq(g:preedit_cursor(), 3, "preedit_cursor")
+      end
+      if e.type == goome.PREEDIT and e.msg == "abc" then
+        got = got + 4
+        eq(e.caret, 3, "caret at end")
+      end
+      if e.type == goome.PREEDIT and e.msg == "" then
+        got = got + 8
+        yes(e.caret == 0 and e.ime == "" and g:event_text() == "", "preedit done")
+      end
+    end
+    local c = g:begin(0)
+    if c then g:finish(c) end
+    if quit then break end
+  end
+  eq(got, 15, "ime events seen")
+  g:close()
+end)
+
+local function ime_ui(in_text, ed_text, focus)
+  local g = assert(goome.open{backend = "test", mode = "window", width = 300, height = 200, test_script = "end 100000"})
+  local u = g:ui()
+  local th = u:theme()
+  th.font, th.font_size, th.anim_ms = nil, 14, 0
+  u:config().blink_ms = 0
+  local k = {g = g, u = u, input = in_text, ed = ed_text}
+  function k.frame(fo)
+    for e in g:events(0) do u:feed(e) end
+    if not u:begin(0) then return end
+    if fo == 1 then u:set_focus() end
+    k.input = u:input_ex("in", k.input, goome.INPUT_NO_SELECT_ON_FOCUS, nil, 64)
+    if fo == 2 then u:set_focus() end
+    k.ed = u:text_edit("ed", k.ed, 80, 0, 96)
+    u:finish()
+    k.hash = g:last_frame():hash()
+  end
+  function k.ime(text) g:push_ime(text) k.frame(0) end
+  function k.preedit(text, cur) g:push_preedit(text, cur) k.frame(0) end
+  k.frame(focus)
+  k.frame(0)
+  return k
+end
+
+test("ime in the ui kit matches C", function()
+  local k = ime_ui("ab", "", 1)
+  local h = {k.hash}
+  k.preedit("xyz", 1)
+  h[2] = k.hash
+  k.preedit("xyz", 3)
+  h[3] = k.hash
+  yes(h[1] ~= h[2] and h[2] ~= h[3] and k.input == "ab", "preedit draws but doesnt type")
+  k.preedit("", 0)
+  eq(hex(k.hash), hex(h[1]), "preedit gone")
+  k.ime("\230\151\165\230\156\172")
+  eq(k.input, "ab\230\151\165\230\156\172", "commit")
+  eq("commit " .. k.input, c_line("commit"), "commit vs C")
+  k.u:close()
+  k.g:close()
+  k = ime_ui("", "line", 2)
+  h[4] = k.hash
+  k.preedit("kana", 2)
+  local edh = k.hash
+  k.preedit("", 0)
+  k.ime("\227\129\139\227\129\170\n")
+  eq(k.ed, "\227\129\139\227\129\170\nline", "text edit commit")
+  k.u:close()
+  k.g:close()
+  eq(hex(h[2]) .. " " .. hex(h[3]) .. " " .. hex(edh), "2e20540f ceafcbad c9c1add5", "ime hashes")
+  eq("ime " .. hexes({h[1], h[2], h[3], h[4], edh}), c_line("ime"), "ime hashes vs C")
+end)
+
+test("a11y tree matches C", function()
+  local g = assert(goome.open{backend = "test", mode = "window", width = 420, height = 700, test_script = "end 100000"})
+  local u = g:ui()
+  u:theme().font = nil
+  local k = {ok = 0, dark = false, mode = 0, vol = 2, name = "Bo", fruit = 1, tab = 1, open = false, note = "", knob = 0}
+  local tree
+  local function frame()
+    for e in g:events(0) do u:feed(e) end
+    if not u:begin(0) then return end
+    u:app("Demo", goome.APP_TITLEBAR + goome.APP_STATUSBAR)
+    u:label("Hello there")
+    if u:button("OK") then k.ok = k.ok + 1 end
+    k.dark = u:checkbox("Dark", k.dark)
+    k.mode = u:radio("Big", k.mode, 1)
+    k.vol = u:slider("Volume", k.vol, 0, 10, "%.1f")
+    k.name = u:input("Name", k.name, 64)
+    k.fruit = u:combo("Fruit", k.fruit, {"Mango", "Kiwi", "Fig"})
+    k.tab = u:tabs("tabs", {"One", "Two"}, k.tab)
+    local shown
+    shown, k.open = u:tree("Folder", k.open)
+    if shown then
+      u:label("inside")
+      u:tree_end()
+    end
+    u:progress(0.25)
+    k.note = u:text_edit("Notes", k.note, 60, 0, 256)
+    u:a11y_role(goome.ROLE_BUTTON, "Knob")
+    u:a11y_value("11")
+    local _, it = u:custom("knob", 40, 40, 0)
+    if it.clicked then k.knob = k.knob + 1 end
+    u:statusbar("ready")
+    u:app_end()
+    u:finish()
+    tree = u:a11y_tree()
+  end
+  local function find(role, label)
+    for i, n in ipairs(tree) do
+      if n.role == role and n.label == label then return i, n end
+    end
+  end
+  local function send(verb, role, label, text)
+    local _, n = find(role, label)
+    yes(n, "node " .. label)
+    g:push{type = goome.CONTROL, msg = string.format("a11y %s %.0f%s", verb, n.id, text and " " .. text or "")}
+  end
+  local function dump()
+    local t = {}
+    for i, n in ipairs(tree) do
+      t[i] = string.format("%d %d %d %.3f %.3f %.3f %.3f [%s] [%s] %.0f %.3f %.3f %.3f %d", n.role, (n.parent or 0) - 1, n.states,
+        n.x, n.y, n.w, n.h, n.label, n.value, n.id, n.num, n.min, n.max, n.caret)
+    end
+    return t
+  end
+  local function same(want, what)
+    local got = dump()
+    eq(#got, #want, what .. " count")
+    for i = 1, #want do eq(got[i], want[i], what .. " node " .. i) end
+  end
+  frame()
+  yes(#tree > 15, "tree size")
+  local app, root = find(goome.ROLE_WINDOW, "Demo")
+  yes(app == 1 and root.parent == nil, "root window")
+  local _, ok = find(goome.ROLE_BUTTON, "OK")
+  yes(ok.parent == 1 and ok.w > 0 and ok.h > 0, "ok button")
+  local _, vol = find(goome.ROLE_SLIDER, "Volume")
+  yes(vol.num == 2 and vol.min == 0 and vol.max == 10 and vol.value == "2.0", "slider node")
+  local _, two = find(goome.ROLE_TAB, "Two")
+  local _, one = find(goome.ROLE_TAB, "One")
+  yes(tree[two.parent].role == goome.ROLE_GROUP and not two.selected and one.selected, "tabs")
+  yes(one.states == goome.A11Y_SELECTED, "states number")
+  local _, knob = find(goome.ROLE_BUTTON, "Knob")
+  eq(knob.value, "11", "custom value")
+  same(c_block("a11y"), "first frame")
+  send("press", goome.ROLE_BUTTON, "OK")
+  send("press", goome.ROLE_CHECKBOX, "Dark")
+  send("set", goome.ROLE_SLIDER, "Volume", "7.5")
+  send("set", goome.ROLE_INPUT, "Name", "hello there")
+  send("expand", goome.ROLE_TREE, "Folder")
+  send("press", goome.ROLE_TAB, "Two")
+  frame()
+  frame()
+  eq(string.format("state %d %d %.3f %s %d %d", k.ok, k.dark and 1 or 0, k.vol, k.name, k.open and 1 or 0, k.tab - 1), c_line("state"), "state vs C")
+  local _, dark = find(goome.ROLE_CHECKBOX, "Dark")
+  yes(dark.checked, "checked")
+  local _, folder = find(goome.ROLE_TREE, "Folder")
+  local _, inside = find(goome.ROLE_TEXT, "inside")
+  yes(folder.expanded and inside and tree[inside.parent] == folder, "tree open")
+  same(c_block("a11y after"), "after actions")
+  u:a11y(false)
+  frame()
+  eq(#tree, 0, "a11y off")
+  u:close()
+  g:close()
+  local o = assert(goome.open_offscreen(200, 100))
+  local ou = o:ui()
+  ou:theme().font = nil
+  for pass = 0, 1 do
+    if ou:begin(0) then ou:button("Hi") ou:finish() end
+    eq(#ou:a11y_tree(), pass, "offscreen a11y pass " .. pass)
+    ou:a11y(true)
+  end
+  ou:close()
+  o:close()
 end)
 
 print(string.format("%d passed, %d failed, %d skipped (%s)", passed, failed, skipped, jit and jit.version or _VERSION))
