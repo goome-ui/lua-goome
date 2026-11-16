@@ -1,0 +1,88 @@
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: compiler
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            printf 'CC=gcc\nEXE=.exe\nLIB=dll\n' >> "$GITHUB_ENV"
+          else
+            printf 'CC=cc\nEXE=\nLIB=so\n' >> "$GITHUB_ENV"
+          fi
+      - uses: actions/cache@v4
+        with:
+          path: lua-dist
+          key: lua-${{ matrix.os }}-${{ hashFiles('tools/lua.sh') }}
+      - name: lua 5.4 and luajit
+        run: |
+          if [ ! -x "lua-dist/54/lua$EXE" ] || [ ! -x "lua-dist/jit/luajit$EXE" ]; then tools/lua.sh lua-dist; fi
+          rm -rf lua-dist/src
+          lua-dist/54/lua$EXE -v
+          lua-dist/jit/luajit$EXE -v
+      - name: module for lua 5.4
+        run: |
+          mkdir -p build/54
+          LUA_INC=lua-dist/54/include LUA_LIB=lua-dist/54/lua54.dll OUT=build/54 WERROR=1 ./build.sh
+      - name: module for luajit
+        run: |
+          mkdir -p build/jit
+          LUA_INC=lua-dist/jit/include LUA_LIB=lua-dist/jit/lua51.dll OUT=build/jit WERROR=1 ./build.sh
+      - name: glibc 2.34
+        if: runner.os == 'Linux'
+        run: |
+          if objdump -T build/54/goome.so | grep -E 'GLIBC_2\.(3[5-9]|[4-9][0-9])\b'; then echo "needs a newer glibc"; exit 1; fi
+      - name: tests on lua 5.4
+        run: GOOME_STRICT=1 LUA_CPATH="build/54/?.$LIB" lua-dist/54/lua$EXE tests/run.lua
+      - name: tests on luajit
+        run: GOOME_STRICT=1 LUA_CPATH="build/jit/?.$LIB" LUA_PATH="lua-dist/jit/?.lua;;" lua-dist/jit/luajit$EXE tests/run.lua
+      - name: hello on the test backend
+        run: |
+          export GOOME_BACKEND=test GOOME_TEST_SCRIPT='screen 800x600 1; 2 click 100,100; 4 key hi; end 8'
+          LUA_CPATH="build/54/?.$LIB" lua-dist/54/lua$EXE examples/hello.lua
+          LUA_CPATH="build/jit/?.$LIB" lua-dist/jit/luajit$EXE examples/hello.lua
+      - name: other examples on the test backend
+        run: |
+          export LUA_CPATH="build/54/?.$LIB"
+          GOOME_BACKEND=test GOOME_TEST_SCRIPT='screen 1x1 1; 3 resize 700x500; 5 close; end 10' lua-dist/54/lua$EXE examples/app.lua
+          GOOME_BACKEND=test GOOME_TEST_SCRIPT='screen 1280x720 1; 3 click 70,110; end 12' lua-dist/54/lua$EXE examples/ui_demo.lua
+          GOOME_BACKEND=test lua-dist/54/lua$EXE examples/grab.lua build/grab.ppm
+          lua-dist/54/lua$EXE examples/offscreen.lua build/offscreen.ppm
+          GOOME_BACKEND=test GOOME_TEST_SCRIPT='screen 1x1 1; 3 click 40,60; 20 close; end 40' lua-dist/54/lua$EXE examples/anim.lua
+          GOOME_BACKEND=test GOOME_TEST_SCRIPT='screen 1x1 1; 3 text hi; 4 preedit abc 1; 6 close; end 10' lua-dist/54/lua$EXE examples/text.lua
+          lua-dist/54/lua$EXE examples/a11y.lua
+          export LUA_CPATH="build/jit/?.$LIB"
+          GOOME_BACKEND=test GOOME_TEST_SCRIPT='screen 1x1 1; 3 click 40,60; 20 close; end 40' lua-dist/jit/luajit$EXE examples/anim.lua
+          lua-dist/jit/luajit$EXE examples/a11y.lua
+
+  luarocks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: lua and luarocks
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q lua5.4 liblua5.4-dev luarocks
+      - name: luarocks make
+        run: |
+          luarocks --lua-version 5.4 lint goome-0.5.0-1.rockspec
+          luarocks --lua-version 5.4 --tree "$RUNNER_TEMP/rocks" make goome-0.5.0-1.rockspec
+          eval "$(luarocks --lua-version 5.4 --tree "$RUNNER_TEMP/rocks" path)"
+          lua5.4 -e 'local g = require("goome") print(g.VERSION, g.parse_combo("alt+h"))'
+          GOOME_STRICT=1 lua5.4 tests/run.lua
