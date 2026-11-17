@@ -21,4 +21,7 @@ build = {
       incdirs = {"native", "src"},
     },
   },
+  variables = {
+    CFLAGS = "$(CFLAGS) -std=c99 -ffp-contract=off",
+  },
 }
