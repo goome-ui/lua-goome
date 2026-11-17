@@ -21,7 +21,11 @@ build = {
       incdirs = {"native", "src"},
     },
   },
-  variables = {
-    CFLAGS = "$(CFLAGS) -std=c99 -ffp-contract=off",
+  platforms = {
+    unix = {
+      type = "command",
+      build_command = "LUA_INC=$(LUA_INCDIR) OUT=. bash ./build.sh",
+      install_command = "cp goome.so $(LIBDIR)/goome.so",
+    },
   },
 }
