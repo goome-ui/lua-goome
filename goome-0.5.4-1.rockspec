@@ -1,8 +1,8 @@
 package = "goome"
-version = "0.5.3-1"
+version = "0.5.4-1"
 source = {
   url = "git+https://github.com/goome-ui/lua-goome.git",
-  tag = "v0.5.3",
+  tag = "v0.5.4",
 }
 description = {
   summary = "Overlays on top of everything, normal desktop apps, or ui inside your game",
