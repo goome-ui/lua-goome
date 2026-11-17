@@ -119,11 +119,11 @@ It isnt on the luarocks.org server, so <a href="https://luarocks.org/">LuaRocks<
 </p>
 
 ```sh
-luarocks install https://github.com/goome-ui/lua-goome/releases/download/v0.5.2/goome-0.5.2-1.src.rock
+luarocks install https://github.com/goome-ui/lua-goome/releases/download/v0.5.3/goome-0.5.3-1.src.rock
 ```
 
 <p align="center">
-It builds the module with your C compiler, that takes a few seconds and only happens once. Add <code>--lua-version 5.1</code> for a LuaJIT tree. From a clone its <code>luarocks make goome-0.5.2-1.rockspec</code>.
+It builds the module with your C compiler, that takes a few seconds and only happens once. Add <code>--lua-version 5.1</code> for a LuaJIT tree. From a clone its <code>luarocks make goome-0.5.3-1.rockspec</code>.
 </p>
 
 <p align="center">

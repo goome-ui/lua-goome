@@ -1,8 +1,8 @@
 package = "goome"
-version = "0.5.2-1"
+version = "0.5.3-1"
 source = {
   url = "git+https://github.com/goome-ui/lua-goome.git",
-  tag = "v0.5.2",
+  tag = "v0.5.3",
 }
 description = {
   summary = "Overlays on top of everything, normal desktop apps, or ui inside your game",
@@ -19,6 +19,13 @@ build = {
     goome = {
       sources = {"native/goome_lib.c", "src/lgoome.c"},
       incdirs = {"native", "src"},
+    },
+  },
+  platforms = {
+    unix = {
+      type = "command",
+      build_command = "LUA_INC=$(LUA_INCDIR) OUT=. bash ./build.sh",
+      install_command = "cp goome.so $(LIBDIR)/goome.so",
     },
   },
 }

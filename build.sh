@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 what="${1:-}"
 lua="${LUA:-lua}"
 out="${OUT:-.}"
-flags=(-O2 -std=c99 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers ${WERROR:+-Werror})
+flags=(-O2 -std=c99 -ffp-contract=off -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers ${WERROR:+-Werror})
 inc=()
 if [ -n "${LUA_INC:-}" ]; then inc=(-I"$LUA_INC"); fi
 src=(native/goome_lib.c src/lgoome.c)
