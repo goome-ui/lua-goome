@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 what="${1:-}"
 lua="${LUA:-lua}"
+read -r -a cc <<< "${CC:-cc}"
 out="${OUT:-.}"
 flags=(-O2 -std=c99 -ffp-contract=off -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers ${WERROR:+-Werror})
 inc=()
@@ -15,15 +16,16 @@ MINGW* | MSYS* | CYGWIN*)
     echo "on windows set LUA_LIB to your lua54.dll or lua51.dll" >&2
     exit 1
   fi
-  "${CC:-gcc}" "${flags[@]}" -Inative "${inc[@]}" -shared -static-libgcc -o "$out/goome.dll" "${src[@]}" "$LUA_LIB"
+  if [ -z "${CC:-}" ]; then cc=(gcc); fi
+  "${cc[@]}" "${flags[@]}" -Inative ${inc[@]+"${inc[@]}"} -shared -static-libgcc -o "$out/goome.dll" "${src[@]}" "$LUA_LIB"
   lib="$out/goome.dll"
   ;;
 Darwin)
-  "${CC:-cc}" "${flags[@]}" -Inative "${inc[@]}" -fPIC -fvisibility=hidden -bundle -undefined dynamic_lookup -mmacosx-version-min=11.0 -o "$out/goome.so" "${src[@]}"
+  "${cc[@]}" "${flags[@]}" -Inative ${inc[@]+"${inc[@]}"} -fPIC -fvisibility=hidden -bundle -undefined dynamic_lookup -mmacosx-version-min=11.0 -o "$out/goome.so" "${src[@]}"
   lib="$out/goome.so"
   ;;
 *)
-  "${CC:-cc}" "${flags[@]}" -Inative "${inc[@]}" -fPIC -fvisibility=hidden -shared -o "$out/goome.so" "${src[@]}"
+  "${cc[@]}" "${flags[@]}" -Inative ${inc[@]+"${inc[@]}"} -fPIC -fvisibility=hidden -shared -o "$out/goome.so" "${src[@]}"
   lib="$out/goome.so"
   ;;
 esac
