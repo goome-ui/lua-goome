@@ -92,8 +92,8 @@ jobs:
           fi
       - name: luarocks make
         run: |
-          luarocks --lua-version 5.4 lint goome-0.5.4-1.rockspec
-          luarocks --lua-version 5.4 --tree "$RUNNER_TEMP/rocks" make goome-0.5.4-1.rockspec
+          luarocks --lua-version 5.4 lint goome-0.5.5-1.rockspec
+          luarocks --lua-version 5.4 --tree "$RUNNER_TEMP/rocks" make goome-0.5.5-1.rockspec
           eval "$(luarocks --lua-version 5.4 --tree "$RUNNER_TEMP/rocks" path)"
           lua5.4 -e 'local g = require("goome") print(g.VERSION, g.parse_combo("alt+h"))'
           GOOME_STRICT=1 lua5.4 tests/run.lua
