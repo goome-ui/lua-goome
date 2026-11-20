@@ -40,6 +40,8 @@ jobs:
         run: |
           mkdir -p build/54
           LUA_INC=lua-dist/54/include LUA_LIB=lua-dist/54/lua54.dll OUT=build/54 WERROR=1 ./build.sh
+      - name: compiler with arguments
+        run: LUA_INC=lua-dist/54/include LUA_LIB=lua-dist/54/lua54.dll tests/cc.sh
       - name: module for luajit
         run: |
           mkdir -p build/jit
@@ -72,17 +74,26 @@ jobs:
           lua-dist/jit/luajit$EXE examples/a11y.lua
 
   luarocks:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: lua and luarocks
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q lua5.4 liblua5.4-dev luarocks
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q lua5.4 liblua5.4-dev luarocks
+          else
+            brew install lua@5.4 luarocks
+            echo "$(brew --prefix lua@5.4)/bin" >> "$GITHUB_PATH"
+          fi
       - name: luarocks make
         run: |
-          luarocks --lua-version 5.4 lint goome-0.5.3-1.rockspec
-          luarocks --lua-version 5.4 --tree "$RUNNER_TEMP/rocks" make goome-0.5.3-1.rockspec
+          luarocks --lua-version 5.4 lint goome-0.5.5-1.rockspec
+          luarocks --lua-version 5.4 --tree "$RUNNER_TEMP/rocks" make goome-0.5.5-1.rockspec
           eval "$(luarocks --lua-version 5.4 --tree "$RUNNER_TEMP/rocks" path)"
           lua5.4 -e 'local g = require("goome") print(g.VERSION, g.parse_combo("alt+h"))'
           GOOME_STRICT=1 lua5.4 tests/run.lua
