@@ -110,7 +110,7 @@ For mods inside other peoples games the other bindings are better, <a href="http
 </p>
 
 <p align="center">
-Tooltips and completion for <code>ui.</code> and <code>goome.</code> in editors with <a href="https://luals.github.io/">lua-language-server</a>: point it at <code>types/</code> in <code>.luarc.json</code>.
+Tooltips and completion for <code>ui.</code> and <code>goome.</code> in editors with <a href="https://luals.github.io/">lua-language-server</a>: point it at <code>types/</code> in <code>.luarc.json</code>. The rock ships that folder too, <code>luarocks show goome</code> prints where it landed.
 </p>
 
 ```json
@@ -127,11 +127,11 @@ It isnt on the luarocks.org server, so <a href="https://luarocks.org/">LuaRocks<
 </p>
 
 ```sh
-luarocks install https://github.com/goome-ui/lua-goome/releases/download/v0.5.5/goome-0.5.5-1.src.rock
+luarocks install https://github.com/goome-ui/lua-goome/releases/download/v0.5.6/goome-0.5.6-1.src.rock
 ```
 
 <p align="center">
-It builds the module with your C compiler, that takes a few seconds and only happens once. Add <code>--lua-version 5.1</code> for a LuaJIT tree. From a clone its <code>luarocks make goome-0.5.5-1.rockspec</code>.
+It builds the module with your C compiler, that takes a few seconds and only happens once. Add <code>--lua-version 5.1</code> for a LuaJIT tree. From a clone its <code>luarocks make goome-0.5.6-1.rockspec</code>.
 </p>
 
 <p align="center">
