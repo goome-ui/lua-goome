@@ -1,8 +1,8 @@
 package = "goome"
-version = "0.5.5-1"
+version = "0.5.6-1"
 source = {
   url = "git+https://github.com/goome-ui/lua-goome.git",
-  tag = "v0.5.5",
+  tag = "v0.5.6",
 }
 description = {
   summary = "Overlays on top of everything, normal desktop apps, or ui inside your game",
@@ -15,6 +15,7 @@ dependencies = {
 }
 build = {
   type = "builtin",
+  copy_directories = {"types"},
   modules = {
     goome = {
       sources = {"native/goome_lib.c", "src/lgoome.c"},
