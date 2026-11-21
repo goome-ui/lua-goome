@@ -109,6 +109,14 @@ Overlay is still the default, nothing changes unless you ask for an app or offsc
 For mods inside other peoples games the other bindings are better, <a href="https://github.com/goome-ui/c-goome">c-goome</a> has the DirectX 9/11/12 and Vulkan backends plus Metal and GL, <a href="https://github.com/goome-ui/csharp-goome">csharp-goome</a> has Unity mod templates and <a href="https://github.com/goome-ui/java-goome">java-goome</a> does Fabric and NeoForge.
 </p>
 
+<p align="center">
+Tooltips and completion for <code>ui.</code> and <code>goome.</code> in editors with <a href="https://luals.github.io/">lua-language-server</a>: point it at <code>types/</code> in <code>.luarc.json</code>.
+</p>
+
+```json
+{ "workspace.library": ["path/to/lua-goome/types"] }
+```
+
 <details>
 <summary align="center"><b>⬇️ Install ⬇️</b></summary>
 
