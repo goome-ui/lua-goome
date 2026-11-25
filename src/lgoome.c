@@ -2407,12 +2407,12 @@ static const char **lg_strs(lua_State *L, int i, int *n)
 {
     luaL_checktype(L, i, LUA_TTABLE);
     *n = LG_LEN(L, i);
+    luaL_checkstack(L, *n + 8, "too many items");
     const char **a = (const char **)malloc(sizeof(char *) * (*n > 0 ? *n : 1));
     if (!a) luaL_error(L, "out of memory");
     for (int k = 0; k < *n; k++) {
         lua_rawgeti(L, i, k + 1);
         a[k] = lua_tostring(L, -1);
-        lua_pop(L, 1);
         if (!a[k]) a[k] = "";
     }
     return a;
@@ -2421,9 +2421,10 @@ static const char **lg_strs(lua_State *L, int i, int *n)
 static int ui_combo(lua_State *L)
 {
     lg_ui *u = lg_uiopen(L, 1);
+    const char *label = luaL_checkstring(L, 2);
     int n, sel = (int)luaL_optnumber(L, 3, 1) - 1;
     const char **items = lg_strs(L, 4, &n);
-    int r = goome_ui_combo(u->u, luaL_checkstring(L, 2), &sel, items, n);
+    int r = goome_ui_combo(u->u, label, &sel, items, n);
     free((void *)items);
     lua_pushinteger(L, sel + 1);
     lua_pushboolean(L, r);
@@ -2433,9 +2434,10 @@ static int ui_combo(lua_State *L)
 static int ui_tabs(lua_State *L)
 {
     lg_ui *u = lg_uiopen(L, 1);
+    const char *id = luaL_checkstring(L, 2);
     int n, sel = (int)luaL_optnumber(L, 4, 1) - 1;
     const char **names = lg_strs(L, 3, &n);
-    int r = goome_ui_tabs(u->u, luaL_checkstring(L, 2), names, n, &sel);
+    int r = goome_ui_tabs(u->u, id, names, n, &sel);
     free((void *)names);
     lua_pushinteger(L, sel + 1);
     lua_pushboolean(L, r);
