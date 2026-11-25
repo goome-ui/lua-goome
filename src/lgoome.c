@@ -2334,11 +2334,30 @@ static int ui_radio(lua_State *L)
     return 2;
 }
 
+static const char *lg_numfmt(lua_State *L, int i)
+{
+    const char *f = luaL_optstring(L, i, NULL);
+    int convs = 0;
+    for (const char *p = f; p && *p; p++) {
+        if (*p != '%') continue;
+        p++;
+        if (*p == '%') continue;
+        while (*p && strchr("-+ #0", *p)) p++;
+        while (*p >= '0' && *p <= '9') p++;
+        if (*p == '.') {
+            p++;
+            while (*p >= '0' && *p <= '9') p++;
+        }
+        if (!*p || !strchr("fFeEgG", *p) || ++convs > 1) return NULL;
+    }
+    return f;
+}
+
 static int ui_slider(lua_State *L)
 {
     lg_ui *u = lg_uiopen(L, 1);
     double v = luaL_optnumber(L, 3, 0);
-    int r = goome_ui_slider(u->u, luaL_checkstring(L, 2), &v, luaL_optnumber(L, 4, 0), luaL_optnumber(L, 5, 1), luaL_optstring(L, 6, NULL));
+    int r = goome_ui_slider(u->u, luaL_checkstring(L, 2), &v, luaL_optnumber(L, 4, 0), luaL_optnumber(L, 5, 1), lg_numfmt(L, 6));
     lua_pushnumber(L, v);
     lua_pushboolean(L, r);
     return 2;
@@ -2561,7 +2580,7 @@ static int ui_drag_float(lua_State *L)
 {
     lg_ui *u = lg_uiopen(L, 1);
     double v = luaL_optnumber(L, 3, 0);
-    int r = goome_ui_drag_float(u->u, luaL_checkstring(L, 2), &v, luaL_optnumber(L, 4, 1), luaL_optnumber(L, 5, 0), luaL_optnumber(L, 6, 0), luaL_optstring(L, 7, NULL));
+    int r = goome_ui_drag_float(u->u, luaL_checkstring(L, 2), &v, luaL_optnumber(L, 4, 1), luaL_optnumber(L, 5, 0), luaL_optnumber(L, 6, 0), lg_numfmt(L, 7));
     lua_pushnumber(L, v);
     lua_pushboolean(L, r);
     return 2;
@@ -2581,7 +2600,7 @@ static int ui_number(lua_State *L)
 {
     lg_ui *u = lg_uiopen(L, 1);
     double v = luaL_optnumber(L, 3, 0);
-    int r = goome_ui_number(u->u, luaL_checkstring(L, 2), &v, luaL_optnumber(L, 4, 1), luaL_optstring(L, 5, NULL));
+    int r = goome_ui_number(u->u, luaL_checkstring(L, 2), &v, luaL_optnumber(L, 4, 1), lg_numfmt(L, 5));
     lua_pushnumber(L, v);
     lua_pushboolean(L, r);
     return 2;
