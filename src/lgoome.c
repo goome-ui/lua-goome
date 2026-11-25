@@ -1045,6 +1045,11 @@ static int lg_px_of(lua_State *L, int i, lg_px *p)
     }
     if ((b = (lg_bmp *)lg_test(L, i, MT_BMP))) {
         if (b->closed) luaL_error(L, "this bitmap is closed");
+        if (b->keep != LUA_NOREF) {
+            lg_getref(L, b->keep);
+            lg_px_of(L, lua_gettop(L), p);
+            lua_pop(L, 1);
+        }
         p->px = b->b.px, p->w = b->b.w, p->h = b->b.h, p->stride = b->b.stride, p->writable = 1;
         return 1;
     }
@@ -1476,7 +1481,8 @@ static int cv_poly(lua_State *L)
 static lg_bmp *lg_bm(lua_State *L, int i)
 {
     lg_bmp *b = (lg_bmp *)lg_check(L, i, MT_BMP);
-    if (b->closed) luaL_error(L, "this bitmap is closed");
+    lg_px p;
+    lg_px_of(L, i, &p);
     return b;
 }
 
@@ -1754,7 +1760,7 @@ static int l_bitmap_wrap(lua_State *L)
     lg_px p;
     lg_px_check(L, 1, &p);
     int w = (int)luaL_optnumber(L, 2, p.w), h = (int)luaL_optnumber(L, 3, p.h), stride = (int)luaL_optnumber(L, 4, p.stride);
-    if (w > stride || (size_t)h * stride > (size_t)p.h * p.stride) return luaL_error(L, "%dx%d stride %d doesnt fit in those pixels", w, h, stride);
+    if (w < 0 || h < 0 || w > stride || (size_t)h * stride > (size_t)p.h * p.stride) return luaL_error(L, "%dx%d stride %d doesnt fit in those pixels", w, h, stride);
     goome_bitmap b;
     memset(&b, 0, sizeof(b));
     b.px = p.px, b.w = w, b.h = h, b.stride = stride;
