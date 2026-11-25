@@ -963,6 +963,7 @@ static int g_push_click(lua_State *L)
 static int g_resize(lua_State *L)
 {
     lg_g *g = lg_gopen(L, 1);
+    g->begin_gen++;
     return lg_res(L, g->g, goome_resize(g->g, (int)luaL_checknumber(L, 2), (int)luaL_checknumber(L, 3), luaL_optnumber(L, 4, 0)));
 }
 
