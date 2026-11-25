@@ -279,6 +279,9 @@ static void lg_track(lua_State *L, int live, int i)
     lua_pop(L, 1);
 }
 
+static void lg_bmp_free(lua_State *L, lg_bmp *b);
+static void lg_font_free(lg_font *f);
+
 static void lg_drop_live(lua_State *L, int live)
 {
     lg_getref(L, live);
@@ -287,6 +290,10 @@ static void lg_drop_live(lua_State *L, int live)
         lua_rawgeti(L, -1, k);
         lg_canvas *c = (lg_canvas *)lg_test(L, -1, MT_CANVAS);
         if (c) c->c = NULL;
+        lg_bmp *b = c ? NULL : (lg_bmp *)lg_test(L, -1, MT_BMP);
+        lg_font *f = c || b ? NULL : (lg_font *)lg_test(L, -1, MT_FONT);
+        if (b && --b->users == 0 && b->closed) lg_bmp_free(L, b);
+        if (f && --f->users == 0 && f->closed) lg_font_free(f);
         lua_pop(L, 1);
         lua_pushnil(L);
         lua_rawseti(L, -2, k);
@@ -1992,6 +1999,10 @@ static void lg_release_all(lua_State *L, int refs)
 static int lg_frame_keep(lua_State *L, lg_ui *u, int i)
 {
     if (i < 0) i = lua_gettop(L) + i + 1;
+    lg_bmp *b = (lg_bmp *)lg_test(L, i, MT_BMP);
+    lg_font *f = b ? NULL : (lg_font *)lg_test(L, i, MT_FONT);
+    if (b) b->users++;
+    if (f) f->users++;
     lg_getref(L, u->live);
     lua_pushvalue(L, i);
     lua_rawseti(L, -2, LG_LEN(L, -2) + 1);
