@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#include <limits.h>
 
 #include "goome.h"
 #include "lua.h"
@@ -1268,12 +1269,15 @@ static int cv_triangle(lua_State *L)
     return 0;
 }
 
-static uint32_t *lg_argb_arg(lua_State *L, int i, int n, int *tmp, int *stride)
+static uint32_t *lg_argb_arg(lua_State *L, int i, int w, int h, int *tmp, int *stride)
 {
     *tmp = 0;
     if (stride) *stride = 0;
+    if (w > 0 && h > INT_MAX / 4 / w) luaL_error(L, "%dx%d pixels is too many", w, h);
+    int n = w > 0 && h > 0 ? w * h : 0;
     lg_px p;
     if (lg_px_of(L, i, &p)) {
+        if (n && (w > p.stride || h > p.h)) luaL_error(L, "wanted %dx%d pixels, got %dx%d", w, h, p.stride, p.h);
         if (stride) *stride = p.stride;
         return p.px;
     }
@@ -1310,7 +1314,7 @@ static int cv_image(lua_State *L)
 {
     lg_canvas *c = lg_cv(L, 1);
     int iw = (int)N(7), ih = (int)N(8), tmp, stride;
-    uint32_t *px = lg_argb_arg(L, 6, iw * ih, &tmp, &stride);
+    uint32_t *px = lg_argb_arg(L, 6, iw, ih, &tmp, &stride);
     if (!tmp && stride != iw) return luaL_error(L, "image() wants pixels with stride == width");
     goome_draw_image(c->c, N(2), N(3), N(4), N(5), px, iw, ih);
     if (tmp) free(px);
@@ -1722,7 +1726,7 @@ static int l_bitmap_from_argb(lua_State *L)
 {
     int w = (int)N(2), h = (int)N(3), tmp, stride;
     if (w <= 0 || h <= 0) return luaL_error(L, "bad bitmap size %dx%d", w, h);
-    uint32_t *px = lg_argb_arg(L, 1, w * h, &tmp, &stride);
+    uint32_t *px = lg_argb_arg(L, 1, w, h, &tmp, &stride);
     goome_bitmap b;
     int rc;
     if (!tmp && stride != w) {

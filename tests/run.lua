@@ -622,6 +622,8 @@ test("bitmap from argb", function()
   b:close()
   raises(function() return b:pixels() end, "closed bitmap")
   raises(function() goome.bitmap_from_argb({1, 2}, 2, 2) end, "short table")
+  raises(function() goome.bitmap_from_argb(goome.canvas(4, 4), 4, 40) end, "more rows than the source")
+  raises(function() goome.canvas(8, 8):image(0, 0, 8, 8, goome.canvas(4, 4), 4, 40) end, "image taller than the source")
   local p = out .. "x.qoi"
   local fh = assert(io.open(p, "wb"))
   fh:write(data("qoi.qoi"))
