@@ -1206,8 +1206,8 @@ static int l_canvas_new(lua_State *L)
     lg_canvas *c = (lg_canvas *)lua_newuserdata(L, sizeof(lg_canvas));
     memset(c, 0, sizeof(*c));
     lg_newmt(L, MT_CANVAS);
-    size_t n = (size_t)(h * stride > 0 ? h * stride : 1);
-    c->buf = (uint32_t *)calloc(n, 4);
+    size_t n = (size_t)h * (size_t)stride;
+    c->buf = (uint32_t *)calloc(n ? n : 1, 4);
     if (!c->buf) return luaL_error(L, "out of memory");
     c->own.px = c->buf, c->own.w = w, c->own.h = h, c->own.stride = stride;
     c->own.scale = scale, c->own.ox = ox, c->own.oy = oy;
